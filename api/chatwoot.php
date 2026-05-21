@@ -76,13 +76,8 @@ function buildForwardText(array $messages, int $sourceConversationId): string {
         $lines[] = "[{$author}] " . str_replace("\n", ' ', $content);
         if (!empty($message['attachments']) && is_array($message['attachments'])) {
             foreach ($message['attachments'] as $attachment) {
-                $url = $attachment['file_url'] ?? $attachment['data_url'] ?? $attachment['url'] ?? $attachment['content'] ?? $attachment['thumb_url'] ?? '';
                 $name = $attachment['file_name'] ?? $attachment['name'] ?? $attachment['filename'] ?? $attachment['title'] ?? ($attachment['id'] ?? 'anexo');
-                if ($url) {
-                    $lines[] = "Anexo: {$name} ({$url})";
-                } else {
-                    $lines[] = "Anexo: {$name}";
-                }
+                $lines[] = "Anexo: {$name} (arquivo incluído)";
             }
         }
         $lines[] = '---';
@@ -98,8 +93,11 @@ function downloadRemoteFile(string $url): ?string {
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+    curl_setopt($ch, CURLOPT_AUTOREFERER, true);
     $data = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
