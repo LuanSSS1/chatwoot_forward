@@ -50,15 +50,26 @@ function fetchJson(url, options = {}) {
         });
 }
 
+function parseJsonSafe(value) {
+    if (typeof value !== 'string') {
+        return value;
+    }
+    try {
+        return JSON.parse(value);
+    } catch (err) {
+        return value;
+    }
+}
+
 window.addEventListener('message', function(event) {
     console.log('Chatwoot message event received', { origin: event.origin, data: event.data });
     if (!event.data) {
         return;
     }
 
-    const raw = event.data;
-    const payload = raw?.data ?? raw;
-    const conversationPayload = payload?.conversation ?? payload;
+    const raw = parseJsonSafe(event.data);
+    const payload = parseJsonSafe(raw?.data ?? raw);
+    const conversationPayload = parseJsonSafe(payload?.conversation ?? payload);
     const convId = conversationPayload?.id
         || payload?.conversation_id
         || payload?.conversationId
