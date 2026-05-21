@@ -139,35 +139,49 @@ function loadMessages() {
         });
 }
 
+function getAttachmentUrl(attachment) {
+    return attachment.file_url || attachment.data_url || attachment.url || attachment.content || attachment.thumb_url || '';
+}
+
+function getAttachmentName(attachment) {
+    return attachment.file_name || attachment.name || attachment.filename || attachment.title || `Anexo ${attachment.id || ''}`.trim();
+}
+
 function renderMessages(messages) {
     if (!messages.length) {
-        document.getElementById('messages-list').innerHTML = '<p>Nenhuma mensagem encontrada.</p>';
+        document.getElementById('messages-list').innerHTML = '<div class="message-item"><div class="message-body">Nenhuma mensagem encontrada.</div></div>';
         return;
     }
 
-    const html = messages.map((msg, index) => {
+    const html = `<div class="messages-grid">${messages.map((msg, index) => {
         const author = msg.message_type === 1 ? 'Operador' : 'Cliente';
-        const content = safeHtml(msg.content || msg.body || '—');
+        const isOutgoing = msg.message_type === 1;
+        const contentText = msg.content || msg.body || msg.content_text || '';
+        const content = safeHtml(contentText || '[Mensagem sem texto]');
         const createdAt = msg.created_at ? ` em ${safeHtml(msg.created_at)}` : '';
 
         let attachmentHtml = '';
         if (Array.isArray(msg.attachments) && msg.attachments.length > 0) {
-            attachmentHtml = '<div class="attachment-list"><strong>Anexos:</strong><ul>' +
+            attachmentHtml = '<div class="attachment-list"><strong>Anexos</strong><ul>' +
                 msg.attachments.map(att => {
-                    const url = safeHtml(att.file_url || att.content || att.url || '');
-                    const name = safeHtml(att.file_name || att.name || url || 'anexo');
-                    return `<li>${name}${url ? ` — <a href="${url}" target="_blank" rel="noopener">abrir</a>` : ''}</li>`;
+                    const url = getAttachmentUrl(att);
+                    const name = safeHtml(getAttachmentName(att) || 'Anexo');
+                    return `<li>${name}${url ? ` — <a href="${safeHtml(url)}" target="_blank" rel="noopener noreferrer">abrir</a>` : ''}</li>`;
                 }).join('') + '</ul></div>';
         }
 
         return `
-            <label class="message-item">
-                <input type="checkbox" data-index="${index}"> <strong>[${author}]</strong>${createdAt}
-                <div>${content}</div>
+            <div class="message-item ${isOutgoing ? 'outgoing' : 'incoming'}">
+                <div class="message-header">
+                    <div class="message-author">${author}</div>
+                    <div class="message-time">${createdAt}</div>
+                </div>
+                <div class="message-body">${content}</div>
                 ${attachmentHtml}
-            </label>
+                <label class="message-checkbox"><input type="checkbox" data-index="${index}"> Selecionar para encaminhar</label>
+            </div>
         `;
-    }).join('');
+    }).join('')}</div>`;
 
     document.getElementById('messages-list').innerHTML = html;
 }

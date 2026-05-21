@@ -69,14 +69,20 @@ function buildForwardText(array $messages, int $sourceConversationId): string {
     $lines = ["🔁 Encaminhado da conversa #{$sourceConversationId}", ''];
     foreach ($messages as $message) {
         $author = isset($message['message_type']) && $message['message_type'] === 1 ? 'Operador' : 'Cliente';
-        $content = trim($message['content'] ?? '');
+        $content = trim($message['content'] ?? $message['body'] ?? '');
         if ($content === '') {
             $content = '[Mensagem sem texto]';
         }
         $lines[] = "[{$author}] " . str_replace("\n", ' ', $content);
         if (!empty($message['attachments']) && is_array($message['attachments'])) {
             foreach ($message['attachments'] as $attachment) {
-                $lines[] = 'Anexo: ' . ($attachment['file_url'] ?? $attachment['content'] ?? ($attachment['url'] ?? '')); 
+                $url = $attachment['file_url'] ?? $attachment['data_url'] ?? $attachment['url'] ?? $attachment['content'] ?? $attachment['thumb_url'] ?? '';
+                $name = $attachment['file_name'] ?? $attachment['name'] ?? $attachment['filename'] ?? $attachment['title'] ?? ($attachment['id'] ?? 'anexo');
+                if ($url) {
+                    $lines[] = "Anexo: {$name} ({$url})";
+                } else {
+                    $lines[] = "Anexo: {$name}";
+                }
             }
         }
         $lines[] = '---';
