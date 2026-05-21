@@ -219,7 +219,7 @@ function searchContacts() {
                         ${phone ? `Telefone: ${phone}<br>` : ''}
                         ${email ? `Email: ${email}<br>` : ''}
                         ${identifier ? `ID: ${identifier}<br>` : ''}
-                        <button type="button" onclick="selectTargetContact(${contact.id}, this)">Selecionar contato</button>
+                        <button type="button" onclick="selectTargetContact(${contact.id}, this, true)">Enviar Mensagens</button>
                     </div>
                 `;
             }).join('');
@@ -230,13 +230,17 @@ function searchContacts() {
         });
 }
 
-function selectTargetContact(contactId, button) {
+function selectTargetContact(contactId, button, autoSend = false) {
     selectedTargetContact = { id: contactId };
     selectedTargetConversationId = null;
     const parent = button.closest('.message-item');
     const title = parent ? parent.querySelector('strong')?.textContent || `#${contactId}` : `#${contactId}`;
     setTargetInfo(`<strong>Contato selecionado:</strong> ${safeHtml(title)}`);
-    loadContactConversations(contactId);
+    if (autoSend) {
+        forwardSelected();
+    } else {
+        loadContactConversations(contactId);
+    }
 }
 
 function loadContactConversations(contactId) {

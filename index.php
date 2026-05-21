@@ -31,7 +31,7 @@
         <div id="contacts-list"></div>
         <div id="conversation-list"></div>
 
-        <button onclick="forwardSelected()" class="btn-forward">✅ Encaminhar Selecionados</button>
+        <button onclick="forwardSelected()" class="btn-forward">✅ Enviar Mensagens</button>
     </div>
 
     <script src="assets/js/main.js"></script>
