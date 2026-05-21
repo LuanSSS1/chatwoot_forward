@@ -55,18 +55,30 @@ window.addEventListener('message', function(event) {
     if (!event.data) {
         return;
     }
-    const payload = event.data.data || event.data;
-    const conv = payload?.conversation || payload;
-    const convId = conv?.id || payload?.conversation_id || payload?.conversationId;
+
+    const raw = event.data;
+    const payload = raw?.data ?? raw;
+    const conversationPayload = payload?.conversation ?? payload;
+    const convId = conversationPayload?.id
+        || payload?.conversation_id
+        || payload?.conversationId
+        || raw?.conversation_id
+        || raw?.conversationId;
 
     if (convId) {
         currentConversationId = parseInt(convId, 10);
         setStatus(`✅ Conversa carregada: #${currentConversationId}`, 'green');
-        const contactName = payload?.contact?.name || payload?.contact?.phone_number || payload?.contact?.email || 'Contato desconhecido';
+        const contactName = conversationPayload?.meta?.sender?.name
+            || conversationPayload?.meta?.sender?.phone_number
+            || conversationPayload?.meta?.sender?.email
+            || payload?.contact?.name
+            || payload?.contact?.phone_number
+            || payload?.contact?.email
+            || 'Contato desconhecido';
         document.getElementById('conv-info').innerHTML = `<strong>Conversa:</strong> #${currentConversationId} - ${safeHtml(contactName)}`;
         loadMessages();
-    } else if (payload) {
-        console.warn('Evento message recebido sem conversation_id:', payload);
+    } else {
+        console.warn('Não foi possível extrair conversation_id do evento message', { raw, payload, conversationPayload });
     }
 });
 
