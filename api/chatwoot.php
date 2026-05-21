@@ -12,6 +12,28 @@ function errorResponse(string $message, int $statusCode = 400): void {
     jsonResponse(['error' => $message], $statusCode);
 }
 
+function buildMultipartFields(array $data, string $prefix = ''): array {
+    $fields = [];
+    foreach ($data as $key => $value) {
+        if ($prefix === '') {
+            $fieldName = $key;
+            if (substr($key, -2) === '[]') {
+                $fieldName = substr($key, 0, -2);
+            }
+        } else {
+            $fieldName = $prefix . '[' . $key . ']';
+        }
+
+        if (is_array($value)) {
+            $fields = array_merge($fields, buildMultipartFields($value, $fieldName));
+            continue;
+        }
+
+        $fields[$fieldName] = $value;
+    }
+    return $fields;
+}
+
 function cwRequest(string $endpoint, string $method = 'GET', $data = null, bool $isMultipart = false): array {
     $url = rtrim(CHATWOOT_URL, '/') . '/api/v1/accounts/' . ACCOUNT_ID . $endpoint;
     $ch = curl_init($url);
@@ -29,7 +51,7 @@ function cwRequest(string $endpoint, string $method = 'GET', $data = null, bool 
     if ($method !== 'GET') {
         curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
         if ($isMultipart && is_array($data)) {
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, buildMultipartFields($data));
         } else {
             curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data, JSON_UNESCAPED_UNICODE));
         }
@@ -297,7 +319,7 @@ if ($action === 'forward') {
     $attachmentFiles = prepareAttachments($selectedMessages);
     if (!empty($attachmentFiles)) {
         foreach ($attachmentFiles as $attachment) {
-            $body['attachments[]'][] = new CURLFile($attachment['path'], $attachment['mime'], $attachment['name']);
+            $body['attachments'][] = new CURLFile($attachment['path'], $attachment['mime'], $attachment['name']);
         }
         $result = cwRequest("/conversations/{$targetConversationId}/messages", 'POST', $body, true);
         foreach ($attachmentFiles as $attachment) {
