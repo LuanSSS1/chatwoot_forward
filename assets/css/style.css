@@ -1,0 +1,15 @@
+body { font-family: Arial, sans-serif; margin: 0; padding: 15px; background: #f4f4f4; }
+.container { max-width: 900px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+h2, h3 { color: #333; }
+input, button { padding: 10px; margin: 5px 0; }
+.btn-forward {
+    background: #22c55e;
+    color: white;
+    font-size: 16px;
+    padding: 12px 25px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-top: 15px;
+}
+.message-item { border: 1px solid #ddd; padding: 10px; margin: 8px 0; border-radius: 6px; }
