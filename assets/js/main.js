@@ -32,7 +32,26 @@ function safeHtml(value) {
     return div.innerHTML;
 }
 
+function fetchJson(url, options = {}) {
+    return fetch(url, options)
+        .then(async response => {
+            const text = await response.text();
+            let data;
+            try {
+                data = text ? JSON.parse(text) : {};
+            } catch (parseErr) {
+                throw new Error(`Erro de JSON: ${parseErr.message}. Resposta: ${text}`);
+            }
+            if (!response.ok) {
+                const apiMessage = data.error || data.message || data.error_description || text;
+                throw new Error(`${apiMessage || 'Erro de rede'} (HTTP ${response.status})`);
+            }
+            return data;
+        });
+}
+
 window.addEventListener('message', function(event) {
+    console.log('Chatwoot message event received', { origin: event.origin, data: event.data });
     if (!event.data) {
         return;
     }
@@ -46,6 +65,8 @@ window.addEventListener('message', function(event) {
         const contactName = payload?.contact?.name || payload?.contact?.phone_number || payload?.contact?.email || 'Contato desconhecido';
         document.getElementById('conv-info').innerHTML = `<strong>Conversa:</strong> #${currentConversationId} - ${safeHtml(contactName)}`;
         loadMessages();
+    } else if (payload) {
+        console.warn('Evento message recebido sem conversation_id:', payload);
     }
 });
 
@@ -66,7 +87,10 @@ window.onload = function() {
     checkUrlParams();
     setTimeout(() => {
         if (!currentConversationId) {
-            logError('Não foi possível receber o contexto do Chatwoot.', 'Verifique se o Dashboard App está configurado corretamente.');
+            logError(
+                'Não foi possível receber o contexto do Chatwoot.',
+                'Verifique se o Dashboard App está configurado corretamente. O app precisa enviar conversation_id via evento message ou a URL deve incluir ?conversation_id=...'
+            );
         }
     }, 2500);
 };
@@ -80,8 +104,7 @@ function loadMessages() {
 
     document.getElementById('messages-list').innerHTML = 'Carregando mensagens...';
 
-    fetch(`api/chatwoot.php?action=get_messages&conversation_id=${currentConversationId}`)
-        .then(response => response.json())
+    fetchJson(`api/chatwoot.php?action=get_messages&conversation_id=${currentConversationId}`)
         .then(data => {
             const messages = data.payload || data.messages || data;
             currentMessages = Array.isArray(messages) ? messages : [];
@@ -140,8 +163,7 @@ function searchContacts() {
     selectedTargetConversationId = null;
     setTargetInfo('');
 
-    fetch(`api/chatwoot.php?action=search_contacts&q=${encodeURIComponent(query)}`)
-        .then(response => response.json())
+    fetchJson(`api/chatwoot.php?action=search_contacts&q=${encodeURIComponent(query)}`)
         .then(data => {
             const contacts = data.contacts || [];
             if (!contacts.length) {
@@ -183,8 +205,7 @@ function selectTargetContact(contactId, button) {
 function loadContactConversations(contactId) {
     document.getElementById('conversation-list').innerHTML = '<p>Carregando conversas do contato...</p>';
 
-    fetch(`api/chatwoot.php?action=get_contact_conversations&contact_id=${contactId}`)
-        .then(response => response.json())
+    fetchJson(`api/chatwoot.php?action=get_contact_conversations&contact_id=${contactId}`)
         .then(data => {
             const conversations = data.conversations || [];
             if (!conversations.length) {
@@ -255,15 +276,11 @@ function forwardSelected() {
     }
     formData.append('selected_messages', JSON.stringify(selectedMessages));
 
-    fetch('api/chatwoot.php', {
+    fetchJson('api/chatwoot.php', {
         method: 'POST',
         body: formData
     })
-        .then(response => response.json())
         .then(data => {
-            if (data.error) {
-                throw new Error(data.error);
-            }
             const targetId = data.forwarded_to_conversation_id || selectedTargetConversationId;
             setStatus(`✅ Mensagem encaminhada para conversa #${targetId}`, 'green');
             if (!selectedTargetConversationId && targetId) {

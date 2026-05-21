@@ -40,6 +40,10 @@ function cwRequest(string $endpoint, string $method = 'GET', $data = null, bool 
     $curlError = curl_error($ch);
     curl_close($ch);
 
+    if ($response === false) {
+        return ['code' => $httpCode ?: 0, 'body' => ['error' => 'Falha de comunicação com Chatwoot', 'curl_error' => $curlError]];
+    }
+
     $decoded = json_decode($response, true);
     if ($decoded === null && json_last_error() !== JSON_ERROR_NONE) {
         $decoded = ['error' => 'Invalid JSON response from Chatwoot', 'raw' => $response, 'curl_error' => $curlError];
