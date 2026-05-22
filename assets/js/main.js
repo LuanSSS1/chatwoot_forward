@@ -162,12 +162,12 @@ function renderMessages(messages) {
 
         let attachmentHtml = '';
         if (Array.isArray(msg.attachments) && msg.attachments.length > 0) {
-            attachmentHtml = '<div class="attachment-list"><strong>Anexos</strong><ul>' +
+            attachmentHtml = '<div class="attachment-list"><strong>📎 Anexos</strong><ul>' +
                 msg.attachments.map(att => {
                     const url = getAttachmentUrl(att);
                     const name = safeHtml(getAttachmentName(att) || 'Anexo');
                     return `<li>${name}${url ? ` — <a href="${safeHtml(url)}" target="_blank" rel="noopener noreferrer">abrir</a>` : ''}</li>`;
-                }).join('') + '</ul></div>';
+                }).join('') + '</ul><div style="font-size: 11px; color: #999; margin-top: 5px;">⚠️ Anexos não são encaminhados automaticamente.</div></div>';
         }
 
         return `
@@ -306,6 +306,15 @@ function forwardSelected() {
         return;
     }
 
+    // Sanitizar mensagens: remover anexos e manter apenas conteúdo essencial
+    const cleanedMessages = selectedMessages.map(msg => ({
+        id: msg.id,
+        content: msg.content || msg.body || '',
+        message_type: msg.message_type,
+        created_at: msg.created_at,
+        sender: msg.sender_name || msg.sender || ''
+    }));
+
     const formData = new FormData();
     formData.append('action', 'forward');
     formData.append('source_conversation_id', currentConversationId);
@@ -315,7 +324,7 @@ function forwardSelected() {
     if (selectedTargetContact) {
         formData.append('target_contact_id', selectedTargetContact.id);
     }
-    formData.append('selected_messages', JSON.stringify(selectedMessages));
+    formData.append('selected_messages', JSON.stringify(cleanedMessages));
 
     fetchJson('api/chatwoot.php', {
         method: 'POST',
@@ -333,3 +342,4 @@ function forwardSelected() {
             logError('Erro ao encaminhar mensagem', err.message || err);
         });
 }
+

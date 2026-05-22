@@ -34,27 +34,53 @@ function buildMultipartFields(array $data, string $prefix = ''): array {
     return $fields;
 }
 
-function cwRequest(string $endpoint, string $method = 'GET', $data = null, bool $isMultipart = false): array {
+function cwRequest(string $endpoint, string $method = 'GET', $data = null, bool $isMultipart = false, array $attachments = []): array {
     $url = rtrim(CHATWOOT_URL, '/') . '/api/v1/accounts/' . ACCOUNT_ID . $endpoint;
     $ch = curl_init($url);
+    
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 90);           // aumentado
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
 
     $headers = ['api_access_token: ' . API_TOKEN];
-    if (!$isMultipart) {
+
+    if ($isMultipart && !empty($attachments)) {
+        $postFields = [];
+
+        // Campos de texto
+        if (is_array($data)) {
+            foreach ($data as $key => $value) {
+                $postFields[$key] = $value;
+            }
+        }
+
+        // === CORREÇÃO PRINCIPAL ===
+        // Envia como attachments[] repetido (formato que o Chatwoot espera)
+        foreach ($attachments as $i => $att) {
+            if (file_exists($att['path'])) {
+                $postFields["attachments[]"] = new CURLFile(
+                    $att['path'],
+                    $att['mime'],
+                    $att['name']
+                );
+            }
+        }
+
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $postFields);
+        $headers[] = 'Content-Type: multipart/form-data';
+    } 
+    else {
         $headers[] = 'Content-Type: application/json';
+        if ($method !== 'GET' && $data !== null) {
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data, JSON_UNESCAPED_UNICODE));
+        }
     }
+
     curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 
     if ($method !== 'GET') {
         curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
-        if ($isMultipart && is_array($data)) {
-            curl_setopt($ch, CURLOPT_POSTFIELDS, buildMultipartFields($data));
-        } else {
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data, JSON_UNESCAPED_UNICODE));
-        }
     }
 
     $response = curl_exec($ch);
@@ -63,12 +89,12 @@ function cwRequest(string $endpoint, string $method = 'GET', $data = null, bool 
     curl_close($ch);
 
     if ($response === false) {
-        return ['code' => $httpCode ?: 0, 'body' => ['error' => 'Falha de comunicação com Chatwoot', 'curl_error' => $curlError]];
+        return ['code' => $httpCode ?: 0, 'body' => ['error' => 'Falha de comunicação', 'curl_error' => $curlError]];
     }
 
     $decoded = json_decode($response, true);
     if ($decoded === null && json_last_error() !== JSON_ERROR_NONE) {
-        $decoded = ['error' => 'Invalid JSON response from Chatwoot', 'raw' => $response, 'curl_error' => $curlError];
+        $decoded = ['error' => 'Resposta inválida do Chatwoot', 'raw' => $response];
     }
 
     return ['code' => $httpCode, 'body' => $decoded];
@@ -91,18 +117,28 @@ function buildForwardText(array $messages, int $sourceConversationId): string {
     $lines = ["🔁 Encaminhado da conversa #{$sourceConversationId}", ''];
     foreach ($messages as $message) {
         $author = isset($message['message_type']) && $message['message_type'] === 1 ? 'Operador' : 'Cliente';
-        $content = trim($message['content'] ?? $message['body'] ?? '');
+
+        $senderText = '';
+        if (!empty($message['sender'])) {
+            if (is_array($message['sender'])) {
+                $senderText = $message['sender']['name'] ?? $message['sender']['available_name'] ?? $message['sender']['email'] ?? '';
+            } elseif (is_object($message['sender'])) {
+                $senderText = $message['sender']->name ?? $message['sender']->available_name ?? $message['sender']->email ?? '';
+            } else {
+                $senderText = (string)$message['sender'];
+            }
+        }
+        $sender = $senderText !== '' ? " ({$senderText})" : '';
+
+        $content = trim((string)($message['content'] ?? $message['body'] ?? ''));
         if ($content === '') {
             $content = '[Mensagem sem texto]';
         }
-        $lines[] = "[{$author}] " . str_replace("\n", ' ', $content);
-        if (!empty($message['attachments']) && is_array($message['attachments'])) {
-            foreach ($message['attachments'] as $attachment) {
-                $name = $attachment['file_name'] ?? $attachment['name'] ?? $attachment['filename'] ?? $attachment['title'] ?? ($attachment['id'] ?? 'anexo');
-                $lines[] = "Anexo: {$name} (arquivo incluído)";
-            }
+        $lines[] = "[{$author}{$sender}] " . str_replace("\n", ' ', $content);
+        if (!empty($message['created_at'])) {
+            $lines[] = 'em ' . $message['created_at'];
         }
-        $lines[] = '---';
+        $lines[] = '';
     }
     return trim(implode("\n", $lines));
 }
@@ -155,12 +191,19 @@ function prepareAttachments(array $messages): array {
             continue;
         }
         foreach ($message['attachments'] as $attachment) {
-            $url = $attachment['file_url'] ?? $attachment['data_url'] ?? $attachment['url'] ?? $attachment['content'] ?? $attachment['thumb_url'] ?? '';
+            $url = $attachment['file_url'] ?? $attachment['data_url'] ?? $attachment['url'] ?? '';
+            if (empty($url)) continue;
+
             $tmpPath = downloadRemoteFile($url);
             if ($tmpPath) {
-                $name = $attachment['file_name'] ?? $attachment['name'] ?? $attachment['filename'] ?? $attachment['title'] ?? basename($tmpPath);
+                $originalName = $attachment['file_name'] ?? $attachment['name'] ?? $attachment['filename'] ?? basename($url);
                 $mime = mime_content_type($tmpPath) ?: 'application/octet-stream';
-                $attachments[] = ['path' => $tmpPath, 'name' => $name, 'mime' => $mime];
+                
+                $attachments[] = [
+                    'path' => $tmpPath, 
+                    'name' => $originalName,
+                    'mime' => $mime
+                ];
             }
         }
     }
@@ -286,13 +329,13 @@ if ($action === 'forward') {
         errorResponse('selected_messages obrigatórios', 400);
     }
 
+    // Determina conversa de destino (mesma lógica que você já tinha)
     if ($targetConversationId <= 0) {
         $convResult = cwRequest("/contacts/{$targetContactId}/conversations");
         if ($convResult['code'] >= 400) {
-            errorResponse($convResult['body']['error'] ?? ($convResult['body']['message'] ?? 'Erro ao buscar conversas do contato'), $convResult['code']);
+            errorResponse($convResult['body']['error'] ?? 'Erro ao buscar conversas do contato', $convResult['code']);
         }
-        $conversations = getPayload($convResult['body']);
-        $conversations = ensureArray($conversations);
+        $conversations = ensureArray(getPayload($convResult['body']));
         if (!empty($conversations)) {
             $latest = getLatestConversation($conversations);
             $targetConversationId = (int)($latest['id'] ?? 0);
@@ -301,38 +344,57 @@ if ($action === 'forward') {
 
     if ($targetConversationId <= 0) {
         if (!defined('INBOX_ID') || INBOX_ID <= 0) {
-            errorResponse('Nenhuma conversa encontrada e INBOX_ID não está configurado para criar nova conversa', 500);
+            errorResponse('INBOX_ID não configurado', 500);
         }
-        $createResult = cwRequest('/inboxes/' . INBOX_ID . '/conversations', 'POST', ['contact_id' => $targetContactId, 'inbox_id' => INBOX_ID, 'status' => 'open', 'source_id' => 'forward-' . time()]);
+        $createResult = cwRequest('/inboxes/' . INBOX_ID . '/conversations', 'POST', [
+            'contact_id' => $targetContactId,
+            'inbox_id' => INBOX_ID,
+            'status' => 'open',
+            'source_id' => 'forward-' . time()
+        ]);
         if ($createResult['code'] >= 400) {
-            errorResponse($createResult['body']['error'] ?? ($createResult['body']['message'] ?? 'Erro ao criar conversa alvo'), $createResult['code']);
+            errorResponse('Erro ao criar conversa alvo', $createResult['code']);
         }
         $created = getPayload($createResult['body']);
         $targetConversationId = (int)($created['id'] ?? 0);
     }
 
-    if ($targetConversationId <= 0) {
-        errorResponse('Não foi possível determinar o ID da conversa de destino', 500);
-    }
+    // === PREPARAÇÃO DO ENVIO ===
+    $textContent = buildForwardText($selectedMessages, $sourceConversationId);
+    $attachments = prepareAttachments($selectedMessages);
 
-    $body = ['content' => buildForwardText($selectedMessages, $sourceConversationId), 'message_type' => 'outgoing'];
-    $attachmentFiles = prepareAttachments($selectedMessages);
-    if (!empty($attachmentFiles)) {
-        foreach ($attachmentFiles as $attachment) {
-            $body['attachments'][] = new CURLFile($attachment['path'], $attachment['mime'], $attachment['name']);
+    $hasAttachments = !empty($attachments);
+
+    $body = [
+        'content' => $textContent,
+        'message_type' => 'outgoing'
+    ];
+
+    $result = cwRequest(
+        "/conversations/{$targetConversationId}/messages", 
+        'POST', 
+        $body, 
+        $hasAttachments,     // isMultipart
+        $attachments         // novos anexos
+    );
+
+    // Limpeza dos arquivos temporários
+    foreach ($attachments as $att) {
+        if (file_exists($att['path'])) {
+            @unlink($att['path']);
         }
-        $result = cwRequest("/conversations/{$targetConversationId}/messages", 'POST', $body, true);
-        foreach ($attachmentFiles as $attachment) {
-            @unlink($attachment['path']);
-        }
-    } else {
-        $result = cwRequest("/conversations/{$targetConversationId}/messages", 'POST', $body);
     }
 
     if ($result['code'] >= 400) {
-        errorResponse($result['body']['error'] ?? ($result['body']['message'] ?? 'Erro ao encaminhar mensagem'), $result['code']);
+        errorResponse($result['body']['error'] ?? $result['body']['message'] ?? 'Erro ao encaminhar mensagem', $result['code']);
     }
-    jsonResponse(['success' => true, 'forwarded_to_conversation_id' => $targetConversationId, 'response' => $result['body']]);
+
+    jsonResponse([
+        'success' => true, 
+        'forwarded_to_conversation_id' => $targetConversationId,
+        'has_attachments' => $hasAttachments,
+        'response' => $result['body']
+    ]);
 }
 
 errorResponse('Ação inválida', 400);
