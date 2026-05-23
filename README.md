@@ -16,3 +16,5 @@ define('API_TOKEN', '');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST');
 header('Access-Control-Allow-Headers: *');
+
+<img width="1381" height="983" alt="image" src="https://github.com/user-attachments/assets/d19ec6cc-523a-4c58-9735-5fcf1750ea2b" />
